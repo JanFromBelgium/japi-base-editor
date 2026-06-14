@@ -4,7 +4,7 @@ JBE is the on-device code editor for the
 [Japi Base](https://github.com/JanFromBelgium/japi-base) retro computer
 platform (Raspberry Pi Pico 2 / RP2350). It feels like the classic
 Turbo Pascal / QuickBASIC IDEs: a dark-blue full-screen editor, a menu bar
-at the top, a status line at the bottom, and everything reachable from the
+at the top, a status line at the bottom and everything reachable from the
 keyboard.
 
 ![Japi Base Editor running on the platform](images/showcase.png)
@@ -33,6 +33,26 @@ This keeps the iteration loop fast (no flashing, no SD shuffling) while
 guaranteeing that we stay inside the platform's seam — JBE may not touch
 anything that will not exist on the Pico.
 
+## Build and run it yourself
+
+You can run the editor on your own Linux machine in a minute, no hardware
+needed. All you need is `gcc`. Check out the platform next to this repo (the
+build links against its simulator) and run `make`:
+
+```sh
+git clone https://github.com/JanFromBelgium/japi-base.git
+git clone https://github.com/JanFromBelgium/japi-base-editor.git
+cd japi-base-editor/sim
+make jbe                 # build the editor on the host simulator
+./jbe A:scratch.txt      # open a file (drive letter + path, like on the device)
+```
+
+`make demo` builds and opens a sample file, `make test` runs the test suite.
+The terminal needs to be at least 127×64 characters. See
+[`sim/README.md`](sim/README.md) for the details — and if you want to write your
+own program for Japi Base, the same simulator is how you develop and test it
+before it ever touches hardware.
+
 ## What it does
 
 - **Two open files at once** — one per pane of the split-screen view. Edit two
@@ -47,7 +67,7 @@ anything that will not exist on the Pico.
   column of numbers out of a table, or comment a vertical strip.
 - **Clipboard** with stream/block awareness (cut, copy, paste).
 - **Toggle line comment** on the current line or selection.
-- **Undo / Redo** with word-grain coalescing, multi-line steps, and a 32 KB
+- **Undo / Redo** with word-grain coalescing, multi-line steps and a 32 KB
   per-buffer history budget.
 - **Find** — incremental, case-insensitive, wrap-around.
 - **Replace** — with per-match Y / N / All confirmation.
@@ -56,13 +76,13 @@ anything that will not exist on the Pico.
   loaded from `C:config/syntax/` on the device.
 - **Long-line wrapping** with a marker glyph.
 - **Horizontal split-screen**, Turbo-Pascal style — toggle the windowed view,
-  swap focus between panes, and move the divider.
+  swap focus between panes and move the divider.
 - **Full CP437 character entry** — accented letters, box-drawing glyphs and
   symbols, so layouts like French AZERTY type correctly.
 
 ### Keyboard
 
-Every menu opens with an **Alt** accelerator, and the common actions also have
+Every menu opens with an **Alt** accelerator and the common actions also have
 a **Ctrl** shortcut. Grouped by menu:
 
 **File** (Alt+F)
@@ -82,7 +102,8 @@ a **Ctrl** shortcut. Grouped by menu:
 | Cut | Alt+E, T | Ctrl+X |
 | Copy | Alt+E, C | Ctrl+C |
 | Paste | Alt+E, P | Ctrl+V |
-| Toggle comment | Alt+E, G | Ctrl+A |
+| Select all | Alt+E, A | Ctrl+A |
+| Toggle comment | Alt+E, G | Ctrl+G |
 | Undo | Alt+E, U | Ctrl+Z |
 | Redo | Alt+E, R | Ctrl+Y |
 
@@ -118,7 +139,7 @@ early two-pane file tool. For now it copies files between the drives — its fir
 job is to copy files from the SD card (A:) onto the built-in flash drive (C:),
 which is exactly what you need to get programs and config onto the machine. This
 is a v0: more file operations (move, delete, rename, make-directory) are
-planned, and it is the seed of a small file manager.
+planned and it is the seed of a small file manager.
 
 ## A note on Basic
 
@@ -136,4 +157,6 @@ current program, but that interpreter is developed on its own track.
 
 ## License
 
-See `LICENSE`.
+Released under the **BSD 3-Clause License** — see [`LICENSE`](LICENSE) for the
+full text. The same permissive licence as the Japi Base platform, so you are
+free to use, modify and redistribute the editor.

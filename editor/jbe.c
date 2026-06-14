@@ -827,6 +827,19 @@ static void sel_begin(jbe_state_t *s, bool block) {
     JBE_PANE(s)->sel_block = block;
 }
 
+/* Select the whole buffer as a stream selection: anchor at the very start,
+   cursor at the end of the last line. */
+static void select_all(jbe_state_t *s) {
+    jbe_pane_t *p = JBE_PANE(s);
+    int last = JBE_BUF(s)->n_lines - 1;
+    p->sel_active = true;
+    p->sel_block  = false;
+    p->sel_row    = 0;
+    p->sel_col    = 0;
+    p->cur_row    = last;
+    p->cur_col    = JBE_BUF(s)->len[last];
+}
+
 /* Delete every byte inside the current selection. Cursor lands at the start
    of what used to be the selection. Leaves sel_active = false.
  * Captures the deleted bytes (multi-line, '\n'-separated) into one DELETE
@@ -1336,8 +1349,9 @@ static const menu_item_t MENU_EDIT[]    = {
     {"Cut",   'T', "Ctrl+X"},
     {"Copy",  'C', "Ctrl+C"},
     {"Paste", 'P', "Ctrl+V"},
+    {"Select All", 'A', "Ctrl+A"},
     JBE_MENU_SEP,
-    {"Toggle Comment", 'G', "Ctrl+A"},
+    {"Toggle Comment", 'G', "Ctrl+G"},
     JBE_MENU_SEP,
     {"Undo",  'U', "Ctrl+Z"},
     {"Redo",  'R', "Ctrl+Y"},
@@ -2040,7 +2054,7 @@ static void menu_activate(jbe_state_t *s) {
             else if (i == 3) save_as_open(s);       /* Save As */
             else if (i == 4) close_current(s);      /* Close */
             break;
-        case 1: /* Edit (indexes 3 and 5 are separator lines) */
+        case 1: /* Edit (indexes 4 and 6 are separator lines) */
             if (i == 0) {                          /* Cut */
                 if (JBE_PANE(s)->sel_active) { clip_copy_selection(s); sel_delete(s); }
             } else if (i == 1) {                   /* Copy */
@@ -2049,11 +2063,13 @@ static void menu_activate(jbe_state_t *s) {
                 clip_paste(s);
                 if (JBE_PANE(s)->cur_col > JBE_BUF(s)->len[JBE_PANE(s)->cur_row])
                     JBE_PANE(s)->cur_col = JBE_BUF(s)->len[JBE_PANE(s)->cur_row];
-            } else if (i == 4) {                   /* Toggle Comment */
+            } else if (i == 3) {                   /* Select All */
+                select_all(s);
+            } else if (i == 5) {                   /* Toggle Comment */
                 toggle_comment(s);
-            } else if (i == 6) {                   /* Undo */
+            } else if (i == 7) {                   /* Undo */
                 jbe_undo(s);
-            } else if (i == 7) {                   /* Redo */
+            } else if (i == 8) {                   /* Redo */
                 jbe_redo(s);
             }
             jbe_follow_cursor(s);
@@ -2350,7 +2366,8 @@ void jbe_handle_key(jbe_state_t *s, uint16_t k) {
 
     /* Ctrl+A toggles a leading comment (') on the current line or selection
        (Edit->Toggle Comment). */
-    if (k == JAPI_KEY_CTRL('A')) { toggle_comment(s); jbe_follow_cursor(s); return; }
+    if (k == JAPI_KEY_CTRL('A')) { select_all(s);    jbe_follow_cursor(s); return; }
+    if (k == JAPI_KEY_CTRL('G')) { toggle_comment(s); jbe_follow_cursor(s); return; }
 
 #ifdef JBB_RUN
     /* Ctrl+B runs the program through the BASIC interpreter (Run menu). */
