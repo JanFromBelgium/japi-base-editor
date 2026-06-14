@@ -7,7 +7,7 @@ Pictures/
 *.wav
 
 # Screenshot generator: keep the compiled binary and sim-disk artifacts out of
-# git (the generated PNGs in screenshots/ are committed as manual assets).
+# git (the generated PNGs in images/ are committed as manual assets).
 tools/screenshot
 simdisk_A/
 simdisk_C/

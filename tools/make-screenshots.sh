@@ -5,7 +5,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"          # JapiBaseEditor
 JB="$HERE/../JapiBase"
-OUT="$HERE/screenshots"
+OUT="$HERE/images"
 mkdir -p "$OUT"
 
 gcc -std=c11 -Wall -Wextra -O2 -DJAPI_SIM \
@@ -17,7 +17,7 @@ work="$(mktemp -d)"                                # keep sim disk artifacts out
 for scene in overview select filemenu showcase; do
   ( cd "$work" && "$HERE/tools/screenshot" "$scene" "$work/$scene.ppm" )
   ffmpeg -y -loglevel error -i "$work/$scene.ppm" "$OUT/$scene.png"
-  echo "  -> screenshots/$scene.png"
+  echo "  -> images/$scene.png"
 done
 rm -rf "$work"
 echo "Done."
