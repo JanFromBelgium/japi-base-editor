@@ -53,6 +53,21 @@ The terminal needs to be at least 127×64 characters. See
 own program for Japi Base, the same simulator is how you develop and test it
 before it ever touches hardware.
 
+### On real hardware
+
+To run the editor on a real Raspberry Pi Pico 2, build the standalone firmware
+(needs the Pico SDK alongside the steps above):
+
+```sh
+cd japi-base-editor/pico
+cmake -G Ninja -B build -DPICO_SDK_PATH=/path/to/pico-sdk .
+ninja -C build           # -> build/japi_base_editor.uf2
+```
+
+Hold BOOTSEL, plug in the Pico 2 and copy the `.uf2` across. This is the
+editor-only machine (no BASIC); see [`pico/README.md`](pico/README.md). The full
+Japi Base Computer (editor + BASIC) is a separate firmware.
+
 ## What it does
 
 - **Two open files at once** — one per pane of the split-screen view. Edit two

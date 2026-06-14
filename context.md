@@ -22,6 +22,8 @@ Only the editor *component* lives in this repo:
   (used by File > Open and the Japi Commander).
 - `sim/` — the host build. It does **not** contain the platform; it links
   against JapiBase's canonical simulator and headers (see Build).
+- `pico/` — the standalone **editor-only** Pico 2 firmware build (editor +
+  platform, no BASIC); `main.c` calls `japi_init()` then `jbe_pico_run()`.
 - `tools/` — the screenshot generator (README images) and the manual PDF
   builder (`make_pdf.py` + `fonts/`).
 

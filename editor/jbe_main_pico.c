@@ -24,9 +24,13 @@ static void run_session(jbe_state_t *ed) {
             uint16_t k = japi_get_char();
             jbe_handle_key(ed, k);
 
-            /* File->New / Open / Close all act on the active pane's document. */
+            /* File->New / Open / Save / Close all act on the active pane's
+               document. Save is deferred here (not on the deep key-handling
+               stack) for the same reason as in jbb_app.c: a flash write from
+               inside jbe_handle_key overflows the ~2 KB Core 0 stack. */
             if (ed->new_request)   { ed->new_request   = false; jbe_new(ed); }
             if (ed->open_request)  { ed->open_request  = false; jbe_load(ed, ed->open_path); }
+            if (ed->save_request)  { ed->save_request  = false; (void)jbe_save(ed); }
             if (ed->close_request) { ed->close_request = false; jbe_close_active(ed); }
 
             if (ed->quit) {
