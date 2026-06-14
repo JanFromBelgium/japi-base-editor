@@ -14,7 +14,7 @@ gcc -std=c11 -Wall -Wextra -O2 -DJAPI_SIM \
   "$JB/sim/japi_sim.c" "$HERE/editor/jbe.c" "$HERE/editor/ui_filelist.c" "$HERE/tools/screenshot.c"
 
 work="$(mktemp -d)"                                # keep sim disk artifacts out of the repo
-for scene in overview select filemenu showcase; do
+for scene in overview select filemenu showcase editmenu; do
   ( cd "$work" && "$HERE/tools/screenshot" "$scene" "$work/$scene.ppm" )
   ffmpeg -y -loglevel error -i "$work/$scene.ppm" "$OUT/$scene.png"
   echo "  -> images/$scene.png"

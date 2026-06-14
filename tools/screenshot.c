@@ -9,7 +9,7 @@
  * menu or make a selection), calls jbe_render() to fill vga_text_buffer, and
  * writes the pixels. Usage:
  *     screenshot <scene> <out.ppm>
- *   scenes: overview | select | filemenu
+ *   scenes: overview | select | filemenu | editmenu | showcase
  *
  * Note: we deliberately do NOT call japi_init() -- that would switch the
  * terminal to its alt-screen. The VGA buffer and the file API both work
@@ -95,6 +95,55 @@ int main(int argc, char **argv) {
         "NEXT count\n"
         "PRINT \"Average over a minute: \"; total / 60\n"
         "END\n";
+    /* A screen-filling, meaningful program for the "editmenu" hero shot: a
+       little scene drawn with the graphics commands, so the colouriser has
+       plenty of keywords, comments, strings and numbers to show off. */
+    static const char *scene_bas =
+        "' =====================================================================\n"
+        "'  A QUIET AFTERNOON\n"
+        "'  A little scene drawn with the Japi Base graphics commands:\n"
+        "'  a sky gradient, the sun, rolling hills, a path and a small house.\n"
+        "' =====================================================================\n"
+        "\n"
+        "DIM x, y AS INTEGER\n"
+        "\n"
+        "GRAPHICS OPEN 0, 0, 126, 63, 1            ' a full-screen 504x384 bitmap\n"
+        "\n"
+        "' --- sky: a smooth vertical gradient -------------------------------\n"
+        "FOR y = 0 TO 250\n"
+        "    LINE 0, y, 503, y, RGB(60, 110, 140 + y / 5)\n"
+        "NEXT y\n"
+        "\n"
+        "' --- a scatter of stars still fading in the morning sky ------------\n"
+        "FOR x = 1 TO 40\n"
+        "    PIXEL 12 * x, 30 + 2 * x, RGB(255, 255, 220)\n"
+        "NEXT x\n"
+        "\n"
+        "' --- the sun, with two soft haloes ---------------------------------\n"
+        "CIRCLE 410, 70, 60, RGB(255, 240, 120), 1\n"
+        "CIRCLE 410, 70, 72, RGB(255, 225, 80)\n"
+        "CIRCLE 410, 70, 86, RGB(255, 205, 50)\n"
+        "\n"
+        "' --- rolling hills as a row of tall green columns ------------------\n"
+        "FOR x = 0 TO 503\n"
+        "    y = 250 + 40 * SIN(x * 0.012)\n"
+        "    LINE x, y, x, 383, RGB(40, 150, 60)\n"
+        "NEXT x\n"
+        "\n"
+        "' --- a winding path drawn dot by dot -------------------------------\n"
+        "FOR x = 0 TO 200\n"
+        "    PIXEL 250 + 60 * SIN(x * 0.05), 383 - x, RGB(210, 200, 150)\n"
+        "NEXT x\n"
+        "\n"
+        "' --- a small house: walls, roof, door and a window -----------------\n"
+        "BOX  120, 250, 90, 70, RGB(200, 180, 150), 1    ' walls\n"
+        "LINE 120, 250, 165, 210, RGB(150, 60, 40)       ' left roof\n"
+        "LINE 210, 250, 165, 210, RGB(150, 60, 40)       ' right roof\n"
+        "BOX  150, 285, 25, 35, RGB(90, 50, 30), 1       ' door\n"
+        "BOX  180, 262, 22, 22, RGB(120, 200, 230), 1    ' window\n"
+        "\n"
+        "PRINT \"A quiet afternoon, in 504 by 384 pixels.\"\n"
+        "END\n";
     static const char *rose =
         "' --- Maurer rose -------------------------------------------\n"
         "' a rose walked in big angular steps -> an intricate web.\n"
@@ -118,8 +167,12 @@ int main(int argc, char **argv) {
         "PRINT \"Maurer rose done.\"\n";
 
     bool showcase = (strcmp(scene, "showcase") == 0);
-    const char *fname = showcase ? "A:rose.bas" : "A:logger.bas";
-    make_file(fname, showcase ? rose : logger);
+    bool editmenu = (strcmp(scene, "editmenu") == 0);
+    const char *fname, *content;
+    if      (showcase) { fname = "A:rose.bas";  content = rose; }
+    else if (editmenu) { fname = "A:scene.bas"; content = scene_bas; }
+    else               { fname = "A:logger.bas"; content = logger; }
+    make_file(fname, content);
     jbe_load(&ed, fname);
     ed.panes[0].cur_row = 0; ed.panes[0].cur_col = 0;
 
@@ -131,6 +184,8 @@ int main(int argc, char **argv) {
         ed.panes[0].cur_row = 7; ed.panes[0].cur_col = 16;
     } else if (strcmp(scene, "filemenu") == 0) {
         jbe_handle_key(&ed, JAPI_KEY_ALT('F'));   /* open the File menu */
+    } else if (editmenu) {
+        jbe_handle_key(&ed, JAPI_KEY_ALT('E'));   /* open the Edit menu */
     }
 
     jbe_render(&ed);

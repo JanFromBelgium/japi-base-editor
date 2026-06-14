@@ -7,7 +7,7 @@ Turbo Pascal / QuickBASIC IDEs: a dark-blue full-screen editor, a menu bar
 at the top, a status line at the bottom and everything reachable from the
 keyboard.
 
-![Japi Base Editor running on the platform](images/showcase.png)
+![Japi Base Editor — the Edit menu over a graphics program](images/editmenu.png)
 
 **This is v1.0, the first version.** It runs on real Japi Base hardware over
 VGA + PS/2. A second version with a built-in contextual help system is on
