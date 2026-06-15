@@ -35,6 +35,7 @@
 typedef struct {
     char name[UI_FILELIST_NAME_MAX + 1];
     bool is_dir;
+    bool tagged;          /* multi-select: marked for a batch operation */
 } ui_filelist_entry_t;
 
 typedef struct {
@@ -55,6 +56,7 @@ typedef struct {
     uint8_t fg, bg;          /* normal entries */
     uint8_t sel_fg, sel_bg;  /* selected entry (highlight bar) */
     uint8_t dir_fg;          /* directories use this fg over bg */
+    uint8_t tag_fg;          /* tagged (multi-selected) entries use this fg */
 
     /* Latched result for the most recent ui_filelist_key call. */
     char picked_name[UI_FILELIST_NAME_MAX + 1];   /* file the user picked */

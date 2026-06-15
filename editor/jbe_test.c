@@ -1738,24 +1738,34 @@ int main(void) {
         jbe_handle_key(&e, JAPI_KEY_ESCAPE);
         CHECK(!e.commander_input_active, "Esc cancels the prompt");
 
-        /* Select cz.txt in the A: pane, F5 copies it to C:. */
+        /* Windows-style copy: select cz.txt in A:, Ctrl+C, Tab to C:, Ctrl+V. */
         ui_filelist_t *a = &e.commander_list[0];
         for (int g = 0; g < a->n_entries &&
              strcmp(a->entries[a->sel].name, "cz.txt") != 0; g++)
             jbe_handle_key(&e, JAPI_KEY_DOWN);
         CHECK(strcmp(a->entries[a->sel].name, "cz.txt") == 0, "selected cz.txt in A:");
         japi_remove("C:cz.txt");
-        jbe_handle_key(&e, JAPI_KEY_F5);
+        jbe_handle_key(&e, JAPI_KEY_CTRL('C'));
+        CHECK(e.clip_n == 1 && !e.clip_cut, "Ctrl+C puts one file on the clipboard");
+        jbe_handle_key(&e, JAPI_KEY_TAB);                 /* to the C: pane */
+        jbe_handle_key(&e, JAPI_KEY_CTRL('V'));           /* paste into C: */
         {
             japi_file_t f;
             bool ok = japi_fopen(&f, "C:cz.txt", JAPI_READ);
             if (ok) japi_fclose(&f);
-            CHECK(ok, "F5 copied cz.txt to C:");
+            CHECK(ok, "Ctrl+V pasted cz.txt to C:");
         }
 
-        /* F8 asks to confirm; Y deletes it from A:. */
-        jbe_handle_key(&e, JAPI_KEY_F8);
-        CHECK(e.commander_confirm_delete, "F8 asks to confirm a delete");
+        /* Back to A:, Space tags the file, Delete asks to confirm, Y removes it. */
+        jbe_handle_key(&e, JAPI_KEY_TAB);                 /* back to A: */
+        for (int g = 0; g < a->n_entries &&
+             strcmp(a->entries[a->sel].name, "cz.txt") != 0; g++)
+            jbe_handle_key(&e, JAPI_KEY_DOWN);
+        int czidx = a->sel;
+        jbe_handle_key(&e, ' ');                          /* tag it, step down */
+        CHECK(a->entries[czidx].tagged, "Space tags the current file");
+        jbe_handle_key(&e, JAPI_KEY_DELETE);
+        CHECK(e.commander_confirm_delete, "Delete asks to confirm");
         jbe_handle_key(&e, 'Y');
         {
             japi_file_t f;

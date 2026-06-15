@@ -93,6 +93,7 @@ jbe_syn_scheme_t *jbe_syn_scheme_load(const char *path);
 void jbe_syn_scheme_free(jbe_syn_scheme_t *scheme);
 #define JBE_STATUS_ROW   63
 #define JBE_NAME_MAX     63
+#define JBE_CLIP_MAX     32      /* max files in one Commander cut/copy batch */
 #define JBE_PATH_MAX     127
 
 /* Largest file jbe_load will even attempt. Checked BEFORE allocating, so a huge
@@ -354,6 +355,13 @@ typedef struct {
     char           commander_input[80];
     int            commander_input_len;
     bool           commander_confirm_delete;
+
+    /* Windows-style clipboard: Ctrl+C / Ctrl+X snapshot the tagged (or current)
+       files; Ctrl+V copies/moves them into the active pane. */
+    char           clip_src[UI_FILELIST_PATH_MAX];           /* source directory */
+    char           clip_names[JBE_CLIP_MAX][UI_FILELIST_NAME_MAX + 1];
+    int            clip_n;
+    bool           clip_cut;                                 /* false=copy, true=move */
 
     /* Options -> CPU speed: a small floating chooser (260 / 324 / 390 MHz). */
     int            cpu_item_index;     /* row of "CPU speed..." in the Options menu */

@@ -96,6 +96,7 @@ void ui_filelist_default_colors(ui_filelist_t *w) {
     w->sel_fg = VGA_BLACK;
     w->sel_bg = VGA_CYAN;
     w->dir_fg = VGA_YELLOW;
+    w->tag_fg = VGA_GREEN;
 }
 
 bool ui_filelist_open(ui_filelist_t *w, const char *path,
@@ -117,6 +118,7 @@ bool ui_filelist_open(ui_filelist_t *w, const char *path,
         ui_filelist_entry_t *e = &w->entries[w->n_entries++];
         copy_str(e->name, sizeof e->name, "..");
         e->is_dir = true;
+        e->tagged = false;
     }
 
     japi_dir_t d;
@@ -135,6 +137,7 @@ bool ui_filelist_open(ui_filelist_t *w, const char *path,
         char full[UI_FILELIST_PATH_MAX];
         join_path(full, sizeof full, w->cwd, e->name);
         e->is_dir = is_directory(full);
+        e->tagged = false;
         w->n_entries++;
     }
     japi_closedir(&d);
@@ -228,10 +231,14 @@ void ui_filelist_render(const ui_filelist_t *w) {
 
         if (idx >= 0 && idx < w->n_entries) {
             const ui_filelist_entry_t *e = &w->entries[idx];
-            if (!selected && e->is_dir) fg = w->dir_fg;
-            /* " name/" or " name" — leading space gives a margin from any
-               dialog frame the host may draw. Trailing slash marks dirs. */
-            snprintf(line, sizeof line, " %s%s", e->name, e->is_dir ? "/" : "");
+            if (!selected) {
+                if (e->tagged)      fg = w->tag_fg;     /* multi-selected */
+                else if (e->is_dir) fg = w->dir_fg;
+            }
+            /* A tagged entry gets a leading marker; otherwise a space gives a
+               margin from any frame. Trailing slash marks directories. */
+            snprintf(line, sizeof line, "%c%s%s", e->tagged ? '\020' : ' ',
+                     e->name, e->is_dir ? "/" : "");
         } else {
             line[0] = 0;
         }

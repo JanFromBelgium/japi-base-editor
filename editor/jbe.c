@@ -3696,6 +3696,7 @@ static void commander_open(jbe_state_t *s) {
     s->commander_confirm_delete = false;
     s->commander_input_len      = 0;
     s->commander_input[0]       = 0;
+    s->clip_n                   = 0;
     for (int p = 0; p < 2; p++) {
         ui_filelist_t *w = &s->commander_list[p];
         ui_filelist_default_colors(w);
@@ -3748,55 +3749,85 @@ static const ui_filelist_entry_t *cmd_pick_file(jbe_state_t *s, const char *verb
     return e;
 }
 
-/* F5: copy the selected file to the other pane's directory. */
-static void commander_copy(jbe_state_t *s) {
-    const ui_filelist_entry_t *e = cmd_pick_file(s, "copy");
-    if (!e) return;
-    ui_filelist_t *src = &s->commander_list[s->commander_pane];
-    ui_filelist_t *dst = &s->commander_list[s->commander_pane ^ 1];
-    char name[UI_FILELIST_NAME_MAX + 1]; snprintf(name, sizeof name, "%s", e->name);
-    char spath[200], dpath[200];
-    cmd_join(spath, sizeof spath, src->cwd, name);
-    cmd_join(dpath, sizeof dpath, dst->cwd, name);
-    long total = cmd_copy_file(spath, dpath);
-    cmd_reload(dst);
-    if (total >= 0) snprintf(s->commander_msg, sizeof s->commander_msg,
-                             "Copied %s (%ld bytes)", name, total);
-    else            snprintf(s->commander_msg, sizeof s->commander_msg,
-                             "Copy of %s failed (disk full?)", name);
-}
-
-/* F6: move = copy to the other pane, then remove the original. */
-static void commander_move(jbe_state_t *s) {
-    const ui_filelist_entry_t *e = cmd_pick_file(s, "move");
-    if (!e) return;
-    ui_filelist_t *src = &s->commander_list[s->commander_pane];
-    ui_filelist_t *dst = &s->commander_list[s->commander_pane ^ 1];
-    char name[UI_FILELIST_NAME_MAX + 1]; snprintf(name, sizeof name, "%s", e->name);
-    char spath[200], dpath[200];
-    cmd_join(spath, sizeof spath, src->cwd, name);
-    cmd_join(dpath, sizeof dpath, dst->cwd, name);
-    long total = cmd_copy_file(spath, dpath);
-    if (total < 0) { cmd_reload(dst);
-        snprintf(s->commander_msg, sizeof s->commander_msg, "Move of %s failed", name); return; }
-    bool rm = japi_remove(spath);
-    cmd_reload(src); cmd_reload(dst);
-    if (rm) snprintf(s->commander_msg, sizeof s->commander_msg, "Moved %s", name);
-    else    snprintf(s->commander_msg, sizeof s->commander_msg,
-                     "Copied %s but could not remove it", name);
-}
-
-/* F8 (confirmed): delete the selected file. */
-static void commander_delete(jbe_state_t *s) {
-    const ui_filelist_entry_t *e = cmd_pick_file(s, "delete");
-    if (!e) return;
+/* The files to act on: every tagged file, or the current one if none are
+   tagged. Folders and ".." are skipped. Returns the count. */
+static int commander_collect(jbe_state_t *s,
+                             char names[][UI_FILELIST_NAME_MAX + 1], int max) {
     ui_filelist_t *a = &s->commander_list[s->commander_pane];
-    char name[UI_FILELIST_NAME_MAX + 1]; snprintf(name, sizeof name, "%s", e->name);
-    char path[200]; cmd_join(path, sizeof path, a->cwd, name);
-    bool ok = japi_remove(path);
+    int n = 0, any = 0;
+    for (int i = 0; i < a->n_entries; i++) if (a->entries[i].tagged) any = 1;
+    if (any) {
+        for (int i = 0; i < a->n_entries && n < max; i++)
+            if (a->entries[i].tagged && !a->entries[i].is_dir)
+                snprintf(names[n++], UI_FILELIST_NAME_MAX + 1, "%s", a->entries[i].name);
+    } else if (a->n_entries > 0 && !a->entries[a->sel].is_dir) {
+        snprintf(names[n++], UI_FILELIST_NAME_MAX + 1, "%s", a->entries[a->sel].name);
+    }
+    return n;
+}
+
+/* Ctrl+C / Ctrl+X: snapshot the tagged-or-current files onto the clipboard. */
+static void commander_clip(jbe_state_t *s, bool cut) {
+    ui_filelist_t *a = &s->commander_list[s->commander_pane];
+    s->clip_n = commander_collect(s, s->clip_names, JBE_CLIP_MAX);
+    if (s->clip_n == 0) {
+        snprintf(s->commander_msg, sizeof s->commander_msg,
+                 "Nothing to %s (pick a file)", cut ? "cut" : "copy");
+        return;
+    }
+    snprintf(s->clip_src, sizeof s->clip_src, "%s", a->cwd);
+    s->clip_cut = cut;
+    snprintf(s->commander_msg, sizeof s->commander_msg,
+             "%s %d item%s -- switch pane and Paste (Ctrl+V)",
+             cut ? "Cut" : "Copied", s->clip_n, s->clip_n == 1 ? "" : "s");
+}
+
+/* Ctrl+V: copy (or move, if cut) the clipboard files into the active pane. */
+static void commander_paste(jbe_state_t *s) {
+    if (s->clip_n == 0) {
+        snprintf(s->commander_msg, sizeof s->commander_msg, "Clipboard is empty"); return;
+    }
+    ui_filelist_t *dst = &s->commander_list[s->commander_pane];
+    int ok = 0;
+    for (int i = 0; i < s->clip_n; i++) {
+        char sp[200], dp[200];
+        cmd_join(sp, sizeof sp, s->clip_src, s->clip_names[i]);
+        cmd_join(dp, sizeof dp, dst->cwd, s->clip_names[i]);
+        if (cmd_copy_file(sp, dp) >= 0) { ok++; if (s->clip_cut) japi_remove(sp); }
+    }
+    cmd_reload(&s->commander_list[0]);
+    cmd_reload(&s->commander_list[1]);
+    snprintf(s->commander_msg, sizeof s->commander_msg,
+             "%s %d item%s", s->clip_cut ? "Moved" : "Pasted", ok, ok == 1 ? "" : "s");
+    if (s->clip_cut) s->clip_n = 0;     /* a cut clipboard is consumed */
+}
+
+/* Delete (confirmed): remove the tagged-or-current files. */
+static void commander_delete(jbe_state_t *s) {
+    char names[JBE_CLIP_MAX][UI_FILELIST_NAME_MAX + 1];
+    int n = commander_collect(s, names, JBE_CLIP_MAX);
+    ui_filelist_t *a = &s->commander_list[s->commander_pane];
+    int ok = 0;
+    for (int i = 0; i < n; i++) {
+        char path[200]; cmd_join(path, sizeof path, a->cwd, names[i]);
+        if (japi_remove(path)) ok++;
+    }
     cmd_reload(a);
     snprintf(s->commander_msg, sizeof s->commander_msg,
-             ok ? "Deleted %s" : "Could not delete %s", name);
+             "Deleted %d item%s", ok, ok == 1 ? "" : "s");
+}
+
+/* Space: toggle the tag on the current file, then step down. Shift+Up/Down
+   extend a contiguous tagged run. Folders and ".." are never tagged. */
+static void commander_tag(ui_filelist_t *a, int idx) {
+    if (idx >= 0 && idx < a->n_entries && !a->entries[idx].is_dir
+        && strcmp(a->entries[idx].name, "..") != 0)
+        a->entries[idx].tagged = !a->entries[idx].tagged;
+}
+static void commander_tag_set(ui_filelist_t *a, int idx) {
+    if (idx >= 0 && idx < a->n_entries && !a->entries[idx].is_dir
+        && strcmp(a->entries[idx].name, "..") != 0)
+        a->entries[idx].tagged = true;
 }
 
 /* F7 (after the name prompt): create a folder in the active pane. */
@@ -3868,23 +3899,38 @@ static void commander_handle_key(jbe_state_t *s, uint16_t k) {
 
     if (k == JAPI_KEY_ESCAPE || k == JAPI_KEY_CTRL('J')) { s->commander_active = false; return; }
     if (k == JAPI_KEY_TAB) { s->commander_pane ^= 1; return; }   /* switch active pane */
-    if (k == JAPI_KEY_F5)  { commander_copy(s); return; }        /* copy */
-    if (k == JAPI_KEY_F6)  { commander_move(s); return; }        /* move */
-    if (k == JAPI_KEY_F7)  { commander_prompt(s, 0, ""); return; } /* new folder */
-    if (k == JAPI_KEY_F2)  {                                     /* rename (prefilled) */
+
+    ui_filelist_t *act = &s->commander_list[s->commander_pane];
+    if (k == JAPI_KEY_CTAB) { ui_filelist_key(act, JAPI_KEY_TAB); return; } /* switch drive */
+
+    /* Multi-select: Space tags the current file then steps down; Shift+Up/Down
+       extend a contiguous tagged run (like Shift-select in Windows). */
+    if (k == ' ')            { commander_tag(act, act->sel);
+                               ui_filelist_key(act, JAPI_KEY_DOWN); return; }
+    if (k == JAPI_KEY_SDOWN) { commander_tag_set(act, act->sel);
+                               ui_filelist_key(act, JAPI_KEY_DOWN);
+                               commander_tag_set(act, act->sel); return; }
+    if (k == JAPI_KEY_SUP)   { commander_tag_set(act, act->sel);
+                               ui_filelist_key(act, JAPI_KEY_UP);
+                               commander_tag_set(act, act->sel); return; }
+
+    /* Windows-style file operations. */
+    if (k == JAPI_KEY_CTRL('C')) { commander_clip(s, false); return; }   /* copy  */
+    if (k == JAPI_KEY_CTRL('X')) { commander_clip(s, true);  return; }   /* cut   */
+    if (k == JAPI_KEY_CTRL('V')) { commander_paste(s);       return; }   /* paste */
+    if (k == JAPI_KEY_F2) {                                              /* rename */
         const ui_filelist_entry_t *e = cmd_pick_file(s, "rename");
         if (e) commander_prompt(s, 1, e->name);
         return;
     }
-    if (k == JAPI_KEY_F8 || k == JAPI_KEY_DELETE) {              /* delete (confirm) */
-        const ui_filelist_entry_t *e = cmd_pick_file(s, "delete");
-        if (e) { s->commander_confirm_delete = true; s->commander_msg[0] = 0; }
+    if (k == JAPI_KEY_F7) { commander_prompt(s, 0, ""); return; }        /* new folder */
+    if (k == JAPI_KEY_DELETE) {                                          /* delete (confirm) */
+        char tmp[JBE_CLIP_MAX][UI_FILELIST_NAME_MAX + 1];
+        if (commander_collect(s, tmp, JBE_CLIP_MAX) > 0)
+            { s->commander_confirm_delete = true; s->commander_msg[0] = 0; }
         return;
     }
-    ui_filelist_t *act = &s->commander_list[s->commander_pane];
-    if (k == JAPI_KEY_CTAB) { ui_filelist_key(act, JAPI_KEY_TAB); return; } /* switch drive */
-    /* Navigation (arrows, PgUp/PgDn, Home/End) and Enter (into folders) go to the
-       active pane; its own Esc/Tab were intercepted above. */
+    /* Navigation (arrows, PgUp/PgDn, Home/End) and Enter (into folders). */
     ui_filelist_key(act, k);
 }
 
@@ -3941,22 +3987,39 @@ static void render_commander(jbe_state_t *s) {
         w->sel_fg = sf; w->sel_bg = sb;
     }
 
-    /* The key legend, built in little blocks: each column has the key on the
-       top row and its action spelled out below it, both left-aligned. */
+    /* The key legend, built as little reverse-printed blocks (black on cyan):
+       the key on the top row, the action spelled out below it, both left-
+       aligned. The gap between blocks is spread so they fill the window width. */
     jfc_clear_row(JFC_MSG_ROW,  VGA_WHITE, BG);
-    jfc_clear_row(JFC_LEG1_ROW, VGA_CYAN,  BG);
+    jfc_clear_row(JFC_LEG1_ROW, VGA_WHITE, BG);
     jfc_clear_row(JFC_LEG2_ROW, VGA_WHITE, BG);
     static const char *const LEG_KEYS[] =
-        { "Tab", "Ctrl+Tab", "F2", "F5", "F6", "F7", "F8", "Esc" };
+        { "Ctrl+C", "Ctrl+X", "Ctrl+V", "Del", "F2", "F7",
+          "Space", "Tab", "^Tab", "Esc" };
     static const char *const LEG_ACTS[] =
-        { "Switch pane", "Switch drive", "Rename", "Copy", "Move",
-          "New folder", "Delete", "Close" };
-    int x = JFC_LEFT + 3;
-    for (int i = 0; i < 8; i++) {
+        { "Copy", "Cut", "Paste", "Delete", "Rename", "New folder",
+          "Select", "Pane", "Drive", "Close" };
+    const int NLEG = (int)(sizeof LEG_KEYS / sizeof LEG_KEYS[0]);
+    int sumw = 0;
+    for (int i = 0; i < NLEG; i++) {
         int kl = (int)strlen(LEG_KEYS[i]), al = (int)strlen(LEG_ACTS[i]);
-        vga_print(JFC_LEG1_ROW, x, LEG_KEYS[i], VGA_CYAN,  BG);   /* key   (cyan)  */
-        vga_print(JFC_LEG2_ROW, x, LEG_ACTS[i], VGA_WHITE, BG);   /* action (white)*/
-        x += (kl > al ? kl : al) + 2;
+        sumw += (kl > al ? kl : al) + 2;          /* +2 for one pad each side */
+    }
+    int avail = (JFC_RIGHT - 1) - (JFC_LEFT + 2);
+    int gap = (NLEG > 1) ? (avail - sumw) / (NLEG - 1) : 0;
+    if (gap < 1) gap = 1;
+    if (gap > 3) gap = 3;
+    int x = JFC_LEFT + 2;
+    for (int i = 0; i < NLEG; i++) {
+        int kl = (int)strlen(LEG_KEYS[i]), al = (int)strlen(LEG_ACTS[i]);
+        int w  = (kl > al ? kl : al) + 2;
+        for (int c = x; c < x + w; c++) {         /* reverse-video chip */
+            vga_set_char(JFC_LEG1_ROW, c, ' ', VGA_BLACK, VGA_CYAN);
+            vga_set_char(JFC_LEG2_ROW, c, ' ', VGA_BLACK, VGA_CYAN);
+        }
+        vga_print(JFC_LEG1_ROW, x + 1, LEG_KEYS[i], VGA_BLACK, VGA_CYAN);
+        vga_print(JFC_LEG2_ROW, x + 1, LEG_ACTS[i], VGA_BLACK, VGA_CYAN);
+        x += w + gap;
     }
 
     /* The message row above the legend: a name prompt, a delete confirmation,
@@ -3970,9 +4033,15 @@ static void render_commander(jbe_state_t *s) {
         vga_print(JFC_MSG_ROW, JFC_LEFT + 2, line, JBE_PROMPT_FG, JBE_PROMPT_BG);
     } else if (s->commander_confirm_delete) {
         ui_filelist_t *a = &s->commander_list[s->commander_pane];
+        int tagged = 0;
+        for (int i = 0; i < a->n_entries; i++) if (a->entries[i].tagged) tagged++;
         char line[160];
-        snprintf(line, sizeof line, " Delete %s ?   Y = yes, any other key = no",
-                 a->n_entries ? a->entries[a->sel].name : "");
+        if (tagged > 1)
+            snprintf(line, sizeof line, " Delete %d files ?   Y = yes, any other key = no",
+                     tagged);
+        else
+            snprintf(line, sizeof line, " Delete %s ?   Y = yes, any other key = no",
+                     a->n_entries ? a->entries[a->sel].name : "");
         jfc_clear_row(JFC_MSG_ROW, JBE_PROMPT_FG, JBE_PROMPT_BG);
         vga_print(JFC_MSG_ROW, JFC_LEFT + 2, line, JBE_PROMPT_FG, JBE_PROMPT_BG);
     } else if (s->commander_msg[0]) {
