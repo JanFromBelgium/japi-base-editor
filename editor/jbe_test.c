@@ -1638,6 +1638,13 @@ int main(void) {
         jbe_handle_key(&s, JAPI_KEY_ESCAPE);
         CHECK(!s.goto_active && JBE_PANE(&s)->cur_row == 1,         "goto: Esc cancels, cursor unmoved");
 
+        /* jbe_goto_line is the exported entry the BASIC interpreter uses for
+           jump-to-error: 1-based, clamped. */
+        jbe_goto_line(&s, 4);
+        CHECK(JBE_PANE(&s)->cur_row == 3,                          "goto: jbe_goto_line(4) -> row 3");
+        jbe_goto_line(&s, 999);
+        CHECK(JBE_PANE(&s)->cur_row == JBE_BUF(&s)->n_lines - 1,    "goto: jbe_goto_line clamps past end");
+
         japi_remove("A:_gl.txt");
         jbe_free(&s);
     }

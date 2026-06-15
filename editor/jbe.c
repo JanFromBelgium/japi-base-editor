@@ -1747,18 +1747,25 @@ static void goto_open(jbe_state_t *s) {
     s->goto_buf[0] = 0;
 }
 
-/* Parse the typed line number (1-based) and jump the active pane's cursor to
-   that row, clamped to the document. An empty input just closes the prompt. */
+/* Move the active pane's cursor to a 1-based line (clamped to the document) and
+   scroll it into view. Exported (see jbe.h): the BASIC interpreter calls this to
+   jump to the line of a parse / run-time error after the program returns. */
+void jbe_goto_line(jbe_state_t *s, int line_1based) {
+    int n = line_1based;
+    if (n < 1) n = 1;
+    if (n > JBE_BUF(s)->n_lines) n = JBE_BUF(s)->n_lines;
+    JBE_PANE(s)->cur_row    = n - 1;
+    JBE_PANE(s)->cur_col    = 0;
+    JBE_PANE(s)->sel_active = false;
+    jbe_follow_cursor(s);
+}
+
+/* Parse the typed line number (1-based) and jump there. Empty input just closes
+   the prompt. */
 static void goto_commit(jbe_state_t *s) {
     s->goto_active = false;
     if (s->goto_len == 0) return;
-    long n = strtol(s->goto_buf, NULL, 10);
-    if (n < 1) n = 1;
-    if (n > JBE_BUF(s)->n_lines) n = JBE_BUF(s)->n_lines;
-    JBE_PANE(s)->cur_row = (int)n - 1;
-    JBE_PANE(s)->cur_col = 0;
-    JBE_PANE(s)->sel_active = false;
-    jbe_follow_cursor(s);
+    jbe_goto_line(s, (int)strtol(s->goto_buf, NULL, 10));
 }
 
 /* Routes a keystroke while the Go to Line prompt is open: digits only. */

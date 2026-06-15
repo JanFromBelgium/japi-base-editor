@@ -444,6 +444,11 @@ void jbe_free(jbe_state_t *s);
 void jbe_handle_key(jbe_state_t *s, uint16_t k);
 void jbe_render(const jbe_state_t *s);
 
+/* Move the active pane's cursor to a 1-based line (clamped) and scroll it into
+   view. Bound to Ctrl+L (Go to Line) and called by the BASIC interpreter to
+   land on the line of a parse / run-time error. */
+void jbe_goto_line(jbe_state_t *s, int line_1based);
+
 /* Undo / redo (also bound to Ctrl+Z / Ctrl+Y and to Edit menu). */
 void jbe_undo(jbe_state_t *s);
 void jbe_redo(jbe_state_t *s);
