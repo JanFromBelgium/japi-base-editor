@@ -3615,14 +3615,26 @@ static void render_confirm_box(jbe_state_t *s) {
     box_text(row2, 2, "Y to discard and continue, any other key to cancel", inr, FG, BG);
 }
 
-/* ---- Japi Commander: a modal two-pane file manager (v0: copy only) -------- */
-/* Title row 0, two framed panes in rows 1..62, status row 63. Left frame cols
-   0..62, right frame 64..126, gap at col 63. */
-#define JFC_TOP        1
-#define JFC_BOT       62
-#define JFC_LIST_ROW   2
-#define JFC_LIST_H    60          /* JFC_BOT-1 - JFC_LIST_ROW + 1 */
-#define JFC_LIST_W    61
+/* ---- Japi Commander: a two-pane file manager in a floating window --------- */
+/* Centred window (like the F1 help) so the editor stays visible around it.
+   Layout inside: top border + a cwd header per pane + the two lists + a
+   two-line key legend + bottom border. A vertical divider splits the panes. */
+#define JFC_W       108
+#define JFC_H        52
+#define JFC_LEFT    ((VGA_COLS - JFC_W) / 2)        /* 9  */
+#define JFC_TOP     ((VGA_ROWS - JFC_H) / 2)        /* 6  */
+#define JFC_RIGHT   (JFC_LEFT + JFC_W - 1)          /* 116 */
+#define JFC_BOTTOM  (JFC_TOP + JFC_H - 1)           /* 57 */
+#define JFC_DIV     (JFC_LEFT + JFC_W / 2)          /* 63: divider column */
+#define JFC_HDR_ROW (JFC_TOP + 1)                   /* pane cwd headers     */
+#define JFC_LIST_ROW (JFC_TOP + 2)
+#define JFC_LIST_H  (JFC_H - 5)                      /* border+hdr+2 legend+border */
+#define JFC_LEG1_ROW (JFC_BOTTOM - 2)
+#define JFC_LEG2_ROW (JFC_BOTTOM - 1)
+#define JFC_P0_COL  (JFC_LEFT + 2)
+#define JFC_P0_W    (JFC_DIV - JFC_P0_COL - 1)
+#define JFC_P1_COL  (JFC_DIV + 2)
+#define JFC_P1_W    (JFC_RIGHT - 1 - JFC_P1_COL)
 
 /* Join cwd + name with the platform's path rule (no separator after ':' or '/'). */
 static void cmd_join(char *out, int out_max, const char *cwd, const char *name) {
@@ -3644,8 +3656,9 @@ static void commander_open(jbe_state_t *s) {
         ui_filelist_default_colors(w);
         w->fg = VGA_WHITE; w->bg = VGA_BLUE; w->dir_fg = VGA_YELLOW;
         w->sel_fg = VGA_BLACK; w->sel_bg = VGA_CYAN;
-        ui_filelist_open(w, p == 0 ? "A:" : "C:",
-                         JFC_LIST_ROW, p == 0 ? 1 : 65, JFC_LIST_H, JFC_LIST_W);
+        ui_filelist_open(w, p == 0 ? "A:" : "C:", JFC_LIST_ROW,
+                         p == 0 ? JFC_P0_COL : JFC_P1_COL, JFC_LIST_H,
+                         p == 0 ? JFC_P0_W : JFC_P1_W);
     }
 }
 
@@ -3830,59 +3843,85 @@ static void commander_handle_key(jbe_state_t *s, uint16_t k) {
     ui_filelist_key(act, k);
 }
 
-static void render_commander(jbe_state_t *s) {
-    const uint8_t TL=218, TR=191, BL=192, BR=217, HZ=196, VT=179;
-    for (int r = 0; r < VGA_ROWS; r++) fill_row(r, VGA_WHITE, VGA_BLUE);
-    fill_row(0, VGA_BLACK, VGA_CYAN);
-    vga_print(0, 2, "Japi Commander", VGA_BLACK, VGA_CYAN);
+/* Clear one row's interior cells inside the Commander window. */
+static void jfc_clear_row(int row, uint8_t fg, uint8_t bg) {
+    for (int c = JFC_LEFT + 1; c < JFC_RIGHT; c++) vga_set_char(row, c, ' ', fg, bg);
+}
 
-    static const int FRAME[2][2] = { {0, 62}, {64, 126} };
+static void render_commander(jbe_state_t *s) {
+    const uint8_t BG = VGA_BLUE, BORD = VGA_WHITE, SHADOW = 0x15;
+    const uint8_t TL=201, TR=187, BL=200, BR=188, HZ=205, VT=186, DIV=179;
+
+    /* drop shadow so the window floats over the editor */
+    for (int r = JFC_TOP + 1; r <= JFC_BOTTOM + 1; r++)
+        vga_set_char(r, JFC_RIGHT + 1, ' ', SHADOW, SHADOW);
+    for (int c = JFC_LEFT + 1; c <= JFC_RIGHT + 1; c++)
+        vga_set_char(JFC_BOTTOM + 1, c, ' ', SHADOW, SHADOW);
+
+    /* interior */
+    for (int r = JFC_TOP; r <= JFC_BOTTOM; r++)
+        for (int c = JFC_LEFT; c <= JFC_RIGHT; c++)
+            vga_set_char(r, c, ' ', VGA_WHITE, BG);
+
+    /* double-line outer border + centred title */
+    vga_set_char(JFC_TOP, JFC_LEFT, TL, BORD, BG);     vga_set_char(JFC_TOP, JFC_RIGHT, TR, BORD, BG);
+    vga_set_char(JFC_BOTTOM, JFC_LEFT, BL, BORD, BG);  vga_set_char(JFC_BOTTOM, JFC_RIGHT, BR, BORD, BG);
+    for (int c = JFC_LEFT+1; c < JFC_RIGHT; c++) {
+        vga_set_char(JFC_TOP, c, HZ, BORD, BG); vga_set_char(JFC_BOTTOM, c, HZ, BORD, BG);
+    }
+    for (int r = JFC_TOP+1; r < JFC_BOTTOM; r++) {
+        vga_set_char(r, JFC_LEFT, VT, BORD, BG); vga_set_char(r, JFC_RIGHT, VT, BORD, BG);
+    }
+    const char *title = " Japi Commander ";
+    vga_print(JFC_TOP, JFC_LEFT + (JFC_W - (int)strlen(title))/2, title, VGA_BLACK, VGA_CYAN);
+
+    /* vertical divider between the two panes */
+    for (int r = JFC_HDR_ROW; r < JFC_LIST_ROW + JFC_LIST_H; r++)
+        vga_set_char(r, JFC_DIV, DIV, BORD, BG);
+
+    /* per-pane cwd header (active pane marked with a triangle + yellow) + list */
     for (int p = 0; p < 2; p++) {
-        int l = FRAME[p][0], rgt = FRAME[p][1];
         bool active = (p == s->commander_pane);
-        uint8_t fc = active ? VGA_YELLOW : VGA_WHITE;   /* frame colour */
-        uint8_t bg = VGA_BLUE;
-        vga_set_char(JFC_TOP, l, TL, fc, bg); vga_set_char(JFC_TOP, rgt, TR, fc, bg);
-        vga_set_char(JFC_BOT, l, BL, fc, bg); vga_set_char(JFC_BOT, rgt, BR, fc, bg);
-        for (int c = l+1; c < rgt; c++) { vga_set_char(JFC_TOP, c, HZ, fc, bg);
-                                          vga_set_char(JFC_BOT, c, HZ, fc, bg); }
-        for (int r = JFC_TOP+1; r < JFC_BOT; r++) { vga_set_char(r, l, VT, fc, bg);
-                                                    vga_set_char(r, rgt, VT, fc, bg); }
-        char title[80];
-        snprintf(title, sizeof title, " %s ", s->commander_list[p].cwd);
-        vga_print(JFC_TOP, l + 2, title, fc, bg);
-        /* the file list; dim the inactive pane's selection bar so the active
-           one stands out (temporarily tweak its colours, then restore). */
-        ui_filelist_t *w = &s->commander_list[p];
+        int  hcol = (p == 0) ? JFC_P0_COL : JFC_P1_COL;
+        int  hw   = (p == 0) ? JFC_P0_W   : JFC_P1_W;
+        char hdr[160];
+        snprintf(hdr, sizeof hdr, "%s%s", active ? "\020 " : "  ", s->commander_list[p].cwd);
+        if ((int)strlen(hdr) > hw) hdr[hw] = 0;
+        vga_print(JFC_HDR_ROW, hcol, hdr, active ? VGA_YELLOW : VGA_WHITE, BG);
+
+        ui_filelist_t *w = &s->commander_list[p];   /* dim the inactive selection bar */
         uint8_t sf = w->sel_fg, sb = w->sel_bg;
         if (!active) { w->sel_fg = VGA_WHITE; w->sel_bg = VGA_BLUE; }
         ui_filelist_render(w);
         w->sel_fg = sf; w->sel_bg = sb;
     }
 
+    /* Two legend rows above the bottom border. The top one becomes the name
+       prompt / delete confirmation / last-result message when there is one. */
+    jfc_clear_row(JFC_LEG1_ROW, VGA_WHITE, BG);
+    jfc_clear_row(JFC_LEG2_ROW, VGA_WHITE, BG);
+    vga_print(JFC_LEG2_ROW, JFC_LEFT + 2,
+              "F2 Rename   F5 Copy   F6 Move   F7 New folder   F8 Delete", VGA_WHITE, BG);
+
     if (s->commander_input_active) {
-        /* Name prompt (black on yellow, like the editor's input prompts). */
-        char line[140];
+        char line[160];
         snprintf(line, sizeof line, " %s %s_",
                  s->commander_input_kind == 0 ? "New folder name:" : "Rename to:",
                  s->commander_input);
-        fill_row(VGA_ROWS - 1, JBE_PROMPT_FG, JBE_PROMPT_BG);
-        vga_print(VGA_ROWS - 1, 2, line, JBE_PROMPT_FG, JBE_PROMPT_BG);
+        jfc_clear_row(JFC_LEG1_ROW, JBE_PROMPT_FG, JBE_PROMPT_BG);
+        vga_print(JFC_LEG1_ROW, JFC_LEFT + 2, line, JBE_PROMPT_FG, JBE_PROMPT_BG);
     } else if (s->commander_confirm_delete) {
         ui_filelist_t *a = &s->commander_list[s->commander_pane];
-        char line[140];
-        snprintf(line, sizeof line, " Delete %s ?  Y = yes, any other key = no",
+        char line[160];
+        snprintf(line, sizeof line, " Delete %s ?   Y = yes, any other key = no",
                  a->n_entries ? a->entries[a->sel].name : "");
-        fill_row(VGA_ROWS - 1, JBE_PROMPT_FG, JBE_PROMPT_BG);
-        vga_print(VGA_ROWS - 1, 2, line, JBE_PROMPT_FG, JBE_PROMPT_BG);
+        jfc_clear_row(JFC_LEG1_ROW, JBE_PROMPT_FG, JBE_PROMPT_BG);
+        vga_print(JFC_LEG1_ROW, JFC_LEFT + 2, line, JBE_PROMPT_FG, JBE_PROMPT_BG);
+    } else if (s->commander_msg[0]) {
+        vga_print(JFC_LEG1_ROW, JFC_LEFT + 2, s->commander_msg, VGA_CYAN, BG);
     } else {
-        fill_row(VGA_ROWS - 1, VGA_BLACK, VGA_CYAN);
-        if (s->commander_msg[0])
-            vga_print(VGA_ROWS - 1, 2, s->commander_msg, VGA_BLACK, VGA_CYAN);
-        else
-            vga_print(VGA_ROWS - 1, 2,
-              "F2 Ren  F5 Copy  F6 Move  F7 Mkdir  F8 Del   Tab pane  ^Tab drive  Esc close",
-              VGA_BLACK, VGA_CYAN);
+        vga_print(JFC_LEG1_ROW, JFC_LEFT + 2,
+                  "Tab Switch pane   Ctrl+Tab Switch drive   Esc Close", VGA_WHITE, BG);
     }
 }
 
@@ -3948,9 +3987,6 @@ void jbe_render(const jbe_state_t *cs) {
        cast away const for that scope; active_pane is restored before the
        function returns and the state ends up unchanged. */
     jbe_state_t *s = (jbe_state_t *)cs;
-
-    /* The Japi Commander takes over the whole screen when active. */
-    if (s->commander_active) { render_commander(s); return; }
 
     render_menu_bar(s);
 
@@ -4046,5 +4082,8 @@ void jbe_render(const jbe_state_t *cs) {
     render_dropdown(s);
 
     /* F1 Help floats on top of everything, with the editor visible around it. */
-    if (s->help_active) render_help(s);
+    /* The Japi Commander and the F1 help float over the editor (it stays
+       visible around them). Only one is ever active at a time. */
+    if (s->commander_active) render_commander(s);
+    if (s->help_active)      render_help(s);
 }
