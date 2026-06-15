@@ -169,10 +169,11 @@ int main(int argc, char **argv) {
     bool showcase = (strcmp(scene, "showcase") == 0);
     bool editmenu = (strcmp(scene, "editmenu") == 0);
     bool help     = (strcmp(scene, "help") == 0);
+    bool helpmenu = (strcmp(scene, "helpmenu") == 0);
     const char *fname, *content;
-    if      (showcase)         { fname = "A:rose.bas";  content = rose; }
-    else if (editmenu || help) { fname = "A:scene.bas"; content = scene_bas; }
-    else                       { fname = "A:logger.bas"; content = logger; }
+    if      (showcase)                     { fname = "A:rose.bas";  content = rose; }
+    else if (editmenu || help || helpmenu) { fname = "A:scene.bas"; content = scene_bas; }
+    else                                   { fname = "A:logger.bas"; content = logger; }
     make_file(fname, content);
     jbe_load(&ed, fname);
     ed.panes[0].cur_row = 0; ed.panes[0].cur_col = 0;
@@ -189,6 +190,8 @@ int main(int argc, char **argv) {
         jbe_handle_key(&ed, JAPI_KEY_ALT('E'));   /* open the Edit menu */
     } else if (help) {
         ed.help_active = true; ed.help_top = 0;   /* F1 help window overlay */
+    } else if (helpmenu) {
+        jbe_handle_key(&ed, JAPI_KEY_ALT('H'));    /* open the Help menu */
     }
 
     jbe_render(&ed);

@@ -1700,6 +1700,13 @@ int main(void) {
         jbe_handle_key(&e, JAPI_KEY_HOME);
         CHECK(e.help_top == 0, "Home returns to top");
         jbe_handle_key(&e, JAPI_KEY_ESCAPE);
+
+        /* The Help menu makes it discoverable: Alt+H, then Editor Help. */
+        jbe_handle_key(&e, JAPI_KEY_ALT('H'));
+        CHECK(e.menu_active && e.menu_idx == 7, "Alt+H opens Help menu");
+        jbe_handle_key(&e, JAPI_KEY_ENTER);
+        CHECK(e.help_active && e.help_top == 0, "Help -> Editor Help opens help");
+        jbe_handle_key(&e, JAPI_KEY_ESCAPE);
     }
 
     if (fails == 0) { printf("PASS: JBE MVP step 1..5c + 10 + 11 + 12 + 13 + 14 + 15 + 16 + 17 + 18 + 19 + 20 (shortcuts+macro-menu) + tab-indent + file(saveas/close/delete) + 21 (F1 help)\n"); return 0; }

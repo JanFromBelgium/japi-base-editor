@@ -1311,12 +1311,12 @@ static void jbe_follow_cursor(jbe_state_t *s) {
    stay grouped left of the (dynamic) Options menu. The accelerator letters are
    all unique on their first letter, no collisions. */
 static const char *JBE_MENU_TITLES[] = {
-    "File", "Edit", "View", "Search", "Macro", "Options", "Run"
+    "File", "Edit", "View", "Search", "Macro", "Options", "Run", "Help"
 };
 /* The Run menu is always present: it carries the Japi Commander, which ships
    with the editor. Only the Basic Interpreter entry *inside* Run is JBB-only,
    because the interpreter is a separate product the host app supplies. */
-#define JBE_MENU_COUNT 7
+#define JBE_MENU_COUNT 8
 #define JBE_MENU_ACCEL_FG  VGA_RED       /* accelerator letter */
 #define JBE_DROP_BG        VGA_CYAN      /* dropdown background */
 #define JBE_DROP_FG        VGA_BLACK     /* dropdown text       */
@@ -1397,12 +1397,19 @@ static const menu_item_t MENU_RUN[] = {
     {"Japi Commander",    'J', "Ctrl+J"},
     {0,0,0}
 };
+
+/* Help menu: makes the built-in F1 help discoverable from the menu bar. */
+static const menu_item_t MENU_HELP[] = {
+    {"Editor Help", 'E', "F1"},
+    {0,0,0}
+};
 /* Returns the menu items for title `m` on this editor state. Slot 5
    (Options) is dynamic — its array lives in s->options_items, rebuilt
    on every menu_open. The other slots are static. */
 static const menu_item_t *menu_items_for(const jbe_state_t *s, int m) {
     static const menu_item_t *const STATIC_MENUS[JBE_MENU_COUNT] = {
-        MENU_FILE, MENU_EDIT, MENU_VIEW, MENU_SEARCH, MENU_MACRO, 0, MENU_RUN
+        MENU_FILE, MENU_EDIT, MENU_VIEW, MENU_SEARCH, MENU_MACRO, 0, MENU_RUN,
+        MENU_HELP
     };
     if (m == 5) return s->options_items;   /* Options is dynamic */
     return STATIC_MENUS[m];
@@ -1481,6 +1488,7 @@ static void help_open(jbe_state_t *s, const char *id) {
     int line = help_anchor_line(id);
     if (line < 0) line = 0;
     if (line > help_max_top()) line = help_max_top();
+    s->menu_active = false;        /* help takes over; close any open menu */
     s->help_active = true;
     s->help_top    = line;
 }
@@ -2174,6 +2182,9 @@ static void menu_activate(jbe_state_t *s) {
             if (acc == 'J') commander_open(s);
             break;
         }
+        case 7: /* Help -> Editor Help: open the manual at the top. */
+            help_open(s, NULL);
+            break;
     }
 }
 
