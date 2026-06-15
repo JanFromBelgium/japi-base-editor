@@ -1077,10 +1077,12 @@ int main(void) {
         /* Open the Options menu — rebuild should give None + 2 built-ins. */
         jbe_handle_key(&e, JAPI_KEY_ALT('O'));
         CHECK(e.menu_active && e.menu_idx == 5,            "dyn: Options menu opened");
-        CHECK(e.options_n == 3,                            "dyn: 3 items (None + 2 built-ins)");
+        CHECK(e.options_n == 4,                            "dyn: 4 items (None + 2 built-ins + CPU)");
         CHECK(strcmp(e.options_labels[0], "Syntax: None") == 0,    "dyn: item 0 = None");
         CHECK(strcmp(e.options_labels[1], "Syntax: Z80") == 0,     "dyn: item 1 = Z80");
         CHECK(strcmp(e.options_labels[2], "Syntax: Basic") == 0, "dyn: item 2 = Basic");
+        CHECK(strcmp(e.options_labels[3], "CPU speed...") == 0,    "dyn: last item = CPU speed");
+        CHECK(e.cpu_item_index == 3,                       "dyn: CPU item index tracked");
         CHECK(e.options_names[0][0] == 0,                  "dyn: name 0 empty");
         CHECK(strcmp(e.options_names[1], "Z80") == 0,      "dyn: name 1 = Z80");
         CHECK(strcmp(e.options_names[2], "Basic") == 0,  "dyn: name 2 = Basic");
@@ -1093,7 +1095,7 @@ int main(void) {
                            "name=Forth\nflavor=z80\nextensions=.fs\nkeywords=DUP DROP OVER\n"),
               "dyn: write forth.syn");
         jbe_handle_key(&e, JAPI_KEY_ALT('O'));
-        CHECK(e.options_n == 4,                            "dyn: Forth added (4 items)");
+        CHECK(e.options_n == 5,                            "dyn: Forth added (5 items incl CPU)");
         CHECK(strcmp(e.options_labels[3], "Syntax: Forth") == 0,  "dyn: item 3 = Forth");
         CHECK(strcmp(e.options_names[3], "Forth") == 0,    "dyn: name 3 = Forth");
 
@@ -1114,7 +1116,7 @@ int main(void) {
                            "name=Z80\nflavor=z80\nextensions=.z80\ncolor_label=red\n"),
               "dyn: write Z80 override");
         jbe_handle_key(&e, JAPI_KEY_ALT('O'));
-        CHECK(e.options_n == 4,                            "dyn: override stays 1 item");
+        CHECK(e.options_n == 5,                            "dyn: override collapses (5 items incl CPU)");
         /* Built-in Z80 entry now resolves to the override (red label). */
         jbe_handle_key(&e, JAPI_KEY_ALT('Z'));
         CHECK(strcmp(JBE_BUF(&e)->syntax_name, "Z80") == 0,         "dyn: buffer = Z80");

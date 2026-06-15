@@ -1532,6 +1532,34 @@ static void help_handle_key(jbe_state_t *s, uint16_t k) {
     if (s->help_top > maxt) s->help_top = maxt;
 }
 
+/* ---- Options -> CPU speed chooser (render_cpu_dialog lives near render_help) */
+static const int CPU_TIERS[3] = { 260, 324, 390 };
+
+static int cpu_tier_index(int mhz) {
+    for (int i = 0; i < 3; i++) if (CPU_TIERS[i] == mhz) return i;
+    return 1;   /* default to the 324 MHz tier */
+}
+
+static void cpu_open(jbe_state_t *s) {
+    s->cpu_dialog_active = true;
+    s->cpu_sel = cpu_tier_index(japi_get_cpu_clock_mhz());
+}
+
+static void cpu_handle_key(jbe_state_t *s, uint16_t k) {
+    switch (k) {
+        case JAPI_KEY_UP:    if (s->cpu_sel > 0) s->cpu_sel--; break;
+        case JAPI_KEY_DOWN:  if (s->cpu_sel < 2) s->cpu_sel++; break;
+        case JAPI_KEY_ENTER:
+            /* Persist the choice and reboot to apply. On hardware this does not
+               return; in the host simulator it is a no-op, so just close. */
+            japi_set_cpu_clock(CPU_TIERS[s->cpu_sel]);
+            s->cpu_dialog_active = false;
+            break;
+        case JAPI_KEY_ESCAPE: s->cpu_dialog_active = false; break;
+        default: break;
+    }
+}
+
 /* --- Find (step 8a) -------------------------------------------------- */
 
 /* Case-insensitive char compare. */
@@ -2164,7 +2192,8 @@ static void menu_activate(jbe_state_t *s) {
             if      (i == 0) macro_toggle_record(s);
             else if (i == 1) macro_replay(s);
             break;
-        case 5: /* Options→Syntax — dynamic items; copy name into buffer */
+        case 5: /* Options — CPU speed, or a dynamic syntax-scheme item */
+            if (i == s->cpu_item_index) { cpu_open(s); break; }
             if (i >= 0 && i < s->options_n) {
                 strncpy(JBE_BUF(s)->syntax_name, s->options_names[i],
                         sizeof JBE_BUF(s)->syntax_name - 1);
@@ -2278,6 +2307,8 @@ void jbe_handle_key(jbe_state_t *s, uint16_t k) {
     if (s->commander_active) { commander_handle_key(s, k); return; }
     /* The F1 help window is modal too, and works with an empty buffer. */
     if (s->help_active) { help_handle_key(s, k); return; }
+    /* The CPU-speed chooser is modal. */
+    if (s->cpu_dialog_active) { cpu_handle_key(s, k); return; }
     if (JBE_BUF(s)->n_lines == 0) return;
     s->open_msg[0] = 0;   /* any key dismisses the transient "could not open" notice */
 
@@ -3166,6 +3197,19 @@ static void rebuild_options_menu(jbe_state_t *s) {
         }
         japi_closedir(&d);
     }
+    /* 4. The CPU-speed tool (not a syntax scheme). Remember its row so the
+       activation can tell it apart from the schemes. */
+    s->cpu_item_index = -1;
+    if (s->options_n < JBE_OPTIONS_MAX_ITEMS) {
+        int i = s->options_n;
+        s->options_names[i][0] = 0;
+        snprintf(s->options_labels[i], sizeof s->options_labels[i], "CPU speed...");
+        s->options_items[i].label = s->options_labels[i];
+        s->options_items[i].accel = 'C';
+        s->options_items[i].hint  = 0;
+        s->cpu_item_index = i;
+        s->options_n++;
+    }
     /* Sentinel for the generic menu helpers. */
     s->options_items[s->options_n].label = 0;
     s->options_items[s->options_n].accel = 0;
@@ -3982,6 +4026,43 @@ static void render_help(const jbe_state_t *s) {
     vga_print(top+H-1, left + (W - (int)strlen(foot)) / 2, foot, VGA_BLACK, VGA_CYAN);
 }
 
+/* The Options -> CPU speed chooser: a small centred dialog. */
+static void render_cpu_dialog(const jbe_state_t *s) {
+    enum { W = 52, H = 11 };
+    const int left = (VGA_COLS - W) / 2, top = (VGA_ROWS - H) / 2;
+    const uint8_t BG = VGA_BLUE, BORD = VGA_WHITE, SHADOW = 0x15;
+    const uint8_t TL=201, TR=187, BL=200, BR=188, HZ=205, VT=186;
+    int cur = cpu_tier_index(japi_get_cpu_clock_mhz());
+    static const char *labels[3] = { "260 MHz   safe / fallback",
+                                     "324 MHz   default high gear",
+                                     "390 MHz   opt-in turbo" };
+    for (int r = top + 1; r <= top + H; r++) vga_set_char(r, left + W, ' ', SHADOW, SHADOW);
+    for (int c = left + 1; c <= left + W; c++) vga_set_char(top + H, c, ' ', SHADOW, SHADOW);
+    for (int r = top; r < top + H; r++)
+        for (int c = left; c < left + W; c++) vga_set_char(r, c, ' ', VGA_WHITE, BG);
+    vga_set_char(top, left, TL, BORD, BG);         vga_set_char(top, left+W-1, TR, BORD, BG);
+    vga_set_char(top+H-1, left, BL, BORD, BG);     vga_set_char(top+H-1, left+W-1, BR, BORD, BG);
+    for (int c = left+1; c < left+W-1; c++) { vga_set_char(top, c, HZ, BORD, BG);
+                                              vga_set_char(top+H-1, c, HZ, BORD, BG); }
+    for (int r = top+1; r < top+H-1; r++) { vga_set_char(r, left, VT, BORD, BG);
+                                            vga_set_char(r, left+W-1, VT, BORD, BG); }
+    const char *title = " CPU speed ";
+    vga_print(top, left + (W - (int)strlen(title))/2, title, VGA_BLACK, VGA_CYAN);
+
+    for (int i = 0; i < 3; i++) {
+        int row = top + 2 + i;
+        bool selrow = (i == s->cpu_sel);
+        uint8_t fg = selrow ? VGA_BLACK : VGA_WHITE, bg = selrow ? VGA_CYAN : BG;
+        for (int c = left+1; c < left+W-1; c++) vga_set_char(row, c, ' ', fg, bg);
+        char line[64];
+        snprintf(line, sizeof line, "%s %s%s", selrow ? "\020" : " ",
+                 labels[i], i == cur ? "   (current)" : "");
+        vga_print(row, left + 3, line, fg, bg);
+    }
+    vga_print(top + H - 3, left + 3, "\030\031 choose   Enter apply   Esc cancel", VGA_WHITE, BG);
+    vga_print(top + H - 2, left + 3, "Changing the speed reboots (~1 s).", VGA_YELLOW, BG);
+}
+
 void jbe_render(const jbe_state_t *cs) {
     /* The pane-render helper has to flip active_pane while it runs, so we
        cast away const for that scope; active_pane is restored before the
@@ -4084,6 +4165,7 @@ void jbe_render(const jbe_state_t *cs) {
     /* F1 Help floats on top of everything, with the editor visible around it. */
     /* The Japi Commander and the F1 help float over the editor (it stays
        visible around them). Only one is ever active at a time. */
-    if (s->commander_active) render_commander(s);
-    if (s->help_active)      render_help(s);
+    if (s->commander_active)  render_commander(s);
+    if (s->help_active)       render_help(s);
+    if (s->cpu_dialog_active) render_cpu_dialog(s);
 }

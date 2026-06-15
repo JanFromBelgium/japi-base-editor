@@ -355,6 +355,11 @@ typedef struct {
     int            commander_input_len;
     bool           commander_confirm_delete;
 
+    /* Options -> CPU speed: a small floating chooser (260 / 324 / 390 MHz). */
+    int            cpu_item_index;     /* row of "CPU speed..." in the Options menu */
+    bool           cpu_dialog_active;
+    int            cpu_sel;            /* highlighted tier: 0 = 260, 1 = 324, 2 = 390 */
+
     /* F1 Help overlay (v2.0, in progress): a centred framed window that floats
        over the editor so the work behind it stays visible. help_top = scroll
        offset (first visible help line). */

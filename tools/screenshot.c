@@ -192,6 +192,8 @@ int main(int argc, char **argv) {
         ed.help_active = true; ed.help_top = 0;   /* F1 help window overlay */
     } else if (helpmenu) {
         jbe_handle_key(&ed, JAPI_KEY_ALT('H'));    /* open the Help menu */
+    } else if (strcmp(scene, "cpu") == 0) {
+        ed.cpu_dialog_active = true; ed.cpu_sel = 2;   /* CPU speed chooser */
     } else if (strcmp(scene, "commander") == 0) {
         make_file("A:hello.bas",     "PRINT \"hi\"\n");
         make_file("A:notes.txt",     "notes\n");
