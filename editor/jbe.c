@@ -23,6 +23,14 @@
    normal cyan bar. */
 #define JBE_PROMPT_FG   VGA_BLACK
 #define JBE_PROMPT_BG   VGA_YELLOW
+/* Bracket matching: the bracket the cursor sits on (or just left of) and its
+   partner get a calm grey "chip"; a bracket with no partner turns red. Grey is
+   distinct from the white-background selection, and recolouring only the cell's
+   background leaves the syntax foreground colour readable. */
+#define JBE_MATCH_FG    VGA_BLACK
+#define JBE_MATCH_BG    0x2A            /* medium grey (6-bit RGB 10/10/10) */
+#define JBE_UNMATCH_FG  VGA_WHITE
+#define JBE_UNMATCH_BG  VGA_RED
 
 /* --- Line buffer helpers ---------------------------------------------- */
 
@@ -3514,6 +3522,69 @@ static void render_dropdown(const jbe_state_t *s) {
     }
 }
 
+/* If c is a bracket, return its partner and set *dir to +1 (search forward for
+   an opener) or -1 (search backward for a closer). Returns 0 if c is no bracket. */
+static char bracket_partner(char c, int *dir) {
+    switch (c) {
+        case '(': *dir = +1; return ')';
+        case '[': *dir = +1; return ']';
+        case '{': *dir = +1; return '}';
+        case ')': *dir = -1; return '(';
+        case ']': *dir = -1; return '[';
+        case '}': *dir = -1; return '{';
+        default:  return 0;
+    }
+}
+
+/* True if column col of this line sits inside a "..." string. Strings are
+   assumed not to span lines (true for BASIC and Z80), so a left-to-right parity
+   scan of the double-quotes before col is enough. (Z80 'x' char literals are not
+   handled -- a deliberate simplification.) */
+static bool col_in_string(const char *line, int len, int col) {
+    bool in = false;
+    for (int i = 0; i < col && i < len; i++) if (line[i] == '"') in = !in;
+    return in;
+}
+
+/* Find the bracket matching the one at (row, col), honouring nesting of the
+   same pair and skipping brackets inside strings. On success writes the partner
+   position to the mrow / mcol out-params and returns true. Returns false when
+   (row,col) is not a bracket, sits in a string, or has no partner. Scans the
+   whole (small) buffer; stops at the first match. */
+bool jbe_bracket_match(jbe_state_t *s, int row, int col,
+                       int *mrow, int *mcol) {
+    if (row < 0 || row >= JBE_BUF(s)->n_lines) return false;
+    const char *L = JBE_BUF(s)->lines[row];
+    int ln = JBE_BUF(s)->len[row];
+    if (col < 0 || col >= ln) return false;
+    int dir; char open = L[col]; char want = bracket_partner(open, &dir);
+    if (!want || col_in_string(L, ln, col)) return false;
+
+    int depth = 1;
+    if (dir > 0) {                                  /* forward: opener -> closer */
+        for (int r = row; r < JBE_BUF(s)->n_lines; r++) {
+            const char *ll = JBE_BUF(s)->lines[r];
+            int n = JBE_BUF(s)->len[r];
+            for (int k = (r == row ? col + 1 : 0); k < n; k++) {
+                if (col_in_string(ll, n, k)) continue;
+                if      (ll[k] == open) depth++;
+                else if (ll[k] == want && --depth == 0) { *mrow = r; *mcol = k; return true; }
+            }
+        }
+    } else {                                        /* backward: closer -> opener */
+        for (int r = row; r >= 0; r--) {
+            const char *ll = JBE_BUF(s)->lines[r];
+            int n = JBE_BUF(s)->len[r];
+            for (int k = (r == row ? col - 1 : n - 1); k >= 0; k--) {
+                if (col_in_string(ll, n, k)) continue;
+                if      (ll[k] == open) depth++;
+                else if (ll[k] == want && --depth == 0) { *mrow = r; *mcol = k; return true; }
+            }
+        }
+    }
+    return false;
+}
+
 /* Draw one pane (text + wrap markers + scrollbar + optional cursor) into
    the screen-row range [top_scr_row, bot_scr_row]. The pane and its buffer
    are reached via the standard JBE_PANE/JBE_BUF macros after temporarily
@@ -3537,6 +3608,27 @@ static void render_pane(jbe_state_t *s, int pane_idx,
     int n_labels = 0;
     if (scheme && scheme->flavor == JBE_SYN_FLAVOR_Z80)
         n_labels = z80_collect_labels(s, scheme, &labels);
+
+    /* Bracket matching (only for the pane that owns the cursor). The "active"
+       bracket is the one under the cursor, or failing that the one just left of
+       it (so it lights up right after you type a closing bracket). If it has a
+       partner, both ends get the grey chip; if not, the active bracket is shown
+       red. brow/bcol mark the active bracket, mrow/mcol its partner. */
+    int brow = -1, bcol = -1, mrow = -1, mcol = -1;
+    bool br_matched = false;
+    if (draw_cursor) {
+        int cr = JBE_PANE(s)->cur_row, cc = JBE_PANE(s)->cur_col;
+        const char *cl = JBE_BUF(s)->lines[cr];
+        int cn = JBE_BUF(s)->len[cr];
+        int dir;
+        if (cc < cn && bracket_partner(cl[cc], &dir) && !col_in_string(cl, cn, cc)) {
+            brow = cr; bcol = cc;
+        } else if (cc - 1 >= 0 && cc - 1 < cn && bracket_partner(cl[cc - 1], &dir)
+                   && !col_in_string(cl, cn, cc - 1)) {
+            brow = cr; bcol = cc - 1;
+        }
+        if (brow >= 0) br_matched = jbe_bracket_match(s, brow, bcol, &mrow, &mcol);
+    }
 
     /* Visible lines, with char-wrap: a logical line of length L renders into
        ceil(L / JBE_WRAP_WIDTH) sub-rows. On every sub-row except the last of
@@ -3564,9 +3656,18 @@ static void render_pane(jbe_state_t *s, int pane_idx,
                 if (ch < 32 || ch == 127) ch = '.';
                 bool sel = in_selection(s, file_row, c);
                 uint8_t fg = has_colour ? line_fg[c] : JBE_FG;
-                vga_set_char(screen_row, c - from, ch,
-                             sel ? JBE_BG : fg,
-                             sel ? fg     : JBE_BG);
+                uint8_t cell_fg = sel ? JBE_BG : fg;
+                uint8_t cell_bg = sel ? fg     : JBE_BG;
+                if (!sel && brow >= 0) {
+                    bool is_active = (file_row == brow && c == bcol);
+                    bool is_match  = (file_row == mrow && c == mcol);
+                    if (br_matched && (is_active || is_match)) {
+                        cell_fg = JBE_MATCH_FG;   cell_bg = JBE_MATCH_BG;
+                    } else if (!br_matched && is_active) {
+                        cell_fg = JBE_UNMATCH_FG; cell_bg = JBE_UNMATCH_BG;
+                    }
+                }
+                vga_set_char(screen_row, c - from, ch, cell_fg, cell_bg);
             }
             if (sub + 1 < subs) {           /* not the last sub-row: show marker */
                 vga_set_char(screen_row, JBE_WRAP_WIDTH, JBE_WRAP_GLYPH,
@@ -3622,8 +3723,14 @@ static void render_pane(jbe_state_t *s, int pane_idx,
             cur_vcol >= 0 && cur_vcol < JBE_VIEW_WIDTH) {
             int sr = top_scr_row + cr;
             vga_char_t cell = vga_text_buffer[sr][cur_vcol];
+            /* When the cursor sits on an unbalanced bracket, draw the block red
+               instead of the usual reverse video so the error is visible even
+               under the cursor. */
+            bool on_unmatched = (!br_matched && brow == JBE_PANE(s)->cur_row
+                                 && bcol == JBE_PANE(s)->cur_col);
             vga_set_char(sr, cur_vcol, cell.code ? cell.code : ' ',
-                         JBE_BG, JBE_FG);
+                         on_unmatched ? JBE_UNMATCH_FG : JBE_BG,
+                         on_unmatched ? JBE_UNMATCH_BG : JBE_FG);
         }
     }
 

@@ -1649,6 +1649,41 @@ int main(void) {
         jbe_free(&s);
     }
 
+    /* ----- Bracket matching ------------------------------------------ */
+    {
+        jbe_state_t s; jbe_init(&s);
+        /* row0: nested parens + a decoy bracket inside a string.
+           row1..2: a pair that spans two lines. */
+        CHECK(make_fixture("A:_bm.txt", "a=(b+[c])+\"a)b\"\nfoo(\nx)\n"), "bm: seed");
+        CHECK(jbe_load(&s, "A:_bm.txt"),                              "bm: load");
+        int mr = -1, mc = -1;
+
+        /* '(' at col 2 matches the ')' at col 8 (skipping the inner [ ] pair). */
+        CHECK(jbe_bracket_match(&s, 0, 2, &mr, &mc) && mr == 0 && mc == 8,
+              "bm: '(' matches its ')' across a nested pair");
+        /* And the reverse: ')' at col 8 matches '(' at col 2. */
+        CHECK(jbe_bracket_match(&s, 0, 8, &mr, &mc) && mr == 0 && mc == 2,
+              "bm: ')' matches its '(' backward");
+        /* The inner '[' at col 5 matches ']' at col 7. */
+        CHECK(jbe_bracket_match(&s, 0, 5, &mr, &mc) && mr == 0 && mc == 7,
+              "bm: inner '[' matches ']'");
+        /* The ')' inside the "a)b" string is not a bracket to match. */
+        int sidx = (int)(strchr(JBE_BUF(&s)->lines[0], '"') - JBE_BUF(&s)->lines[0]) + 1;
+        CHECK(JBE_BUF(&s)->lines[0][sidx + 1] == ')',                 "bm: located the string ')'");
+        CHECK(!jbe_bracket_match(&s, 0, sidx + 1, &mr, &mc),          "bm: ')' inside a string is ignored");
+        /* Cross-line: '(' at end of row1 matches ')' on row2. */
+        CHECK(jbe_bracket_match(&s, 1, 3, &mr, &mc) && mr == 2 && mc == 1,
+              "bm: '(' matches ')' on the next line");
+        /* A lone '(' with no partner: no match. */
+        CHECK(make_fixture("A:_bm2.txt", "if (a>b\n"),                "bm: seed unbalanced");
+        CHECK(jbe_load(&s, "A:_bm2.txt"),                            "bm: load unbalanced");
+        CHECK(!jbe_bracket_match(&s, 0, 3, &mr, &mc),                 "bm: unbalanced '(' has no match");
+
+        japi_remove("A:_bm.txt");
+        japi_remove("A:_bm2.txt");
+        jbe_free(&s);
+    }
+
     /* ----- File: Save As + Save-on-untitled (the New->Save bug) ------- */
     {
         jbe_state_t s; jbe_init(&s);
@@ -1948,7 +1983,7 @@ int main(void) {
         }
     }
 
-    if (fails == 0) { printf("PASS: JBE MVP step 1..5c + 10 + 11 + 12 + 13 + 14 + 15 + 16 + 17 + 18 + 19 + 20 (shortcuts+macro-menu) + tab-indent + auto-indent + goto-line + file(saveas/close/delete) + 21 (F1 help) + 22 (commander ops)\n"); return 0; }
+    if (fails == 0) { printf("PASS: JBE MVP step 1..5c + 10 + 11 + 12 + 13 + 14 + 15 + 16 + 17 + 18 + 19 + 20 (shortcuts+macro-menu) + tab-indent + auto-indent + goto-line + bracket-match + file(saveas/close/delete) + 21 (F1 help) + 22 (commander ops)\n"); return 0; }
     printf("%d check(s) failed\n", fails);
     return 1;
 }

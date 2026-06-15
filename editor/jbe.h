@@ -449,6 +449,12 @@ void jbe_render(const jbe_state_t *s);
    land on the line of a parse / run-time error. */
 void jbe_goto_line(jbe_state_t *s, int line_1based);
 
+/* Find the bracket matching the one at (row, col): writes the partner position
+   to the mrow / mcol out-params and returns true, or false if (row,col) is not a
+   bracket, sits in a string, or is unbalanced. Exposed mainly so the test can
+   exercise the nesting / string-skipping logic. */
+bool jbe_bracket_match(jbe_state_t *s, int row, int col, int *mrow, int *mcol);
+
 /* Undo / redo (also bound to Ctrl+Z / Ctrl+Y and to Edit menu). */
 void jbe_undo(jbe_state_t *s);
 void jbe_redo(jbe_state_t *s);
