@@ -1921,6 +1921,9 @@ int main(void) {
            guards against is hardware-only. */
         {
             CHECK(make_fixture("A:rn.txt", "x"), "write rename fixture");
+            /* A stale temp left over from an interrupted earlier rename must not
+               trip up the next one: commander_do_rename clears it first. */
+            CHECK(make_fixture("A:.jbe_rename.tmp", "stale"), "rename: plant stale temp");
             /* Reopen the Commander so the pane reloads and shows the new file. */
             jbe_handle_key(&e, JAPI_KEY_CTRL('J'));    /* close */
             jbe_handle_key(&e, JAPI_KEY_CTRL('J'));    /* open -> fresh listing */
@@ -1940,6 +1943,12 @@ int main(void) {
                 bool ok = japi_fopen(&f, "A:RN.TXT", JAPI_READ);
                 if (ok) japi_fclose(&f);
                 CHECK(ok, "RN.TXT exists after rename");
+            }
+            {
+                japi_file_t f;
+                bool leftover = japi_fopen(&f, "A:.jbe_rename.tmp", JAPI_READ);
+                if (leftover) japi_fclose(&f);
+                CHECK(!leftover, "rename: temp file cleaned up, none left behind");
             }
             japi_remove("A:RN.TXT");
             japi_remove("A:rn.txt");

@@ -3560,25 +3560,42 @@ bool jbe_bracket_match(jbe_state_t *s, int row, int col,
     int dir; char open = L[col]; char want = bracket_partner(open, &dir);
     if (!want || col_in_string(L, ln, col)) return false;
 
+    /* Track string membership incrementally per line (instr = parity of the
+       double-quotes before the current column) instead of rescanning [0,k) for
+       every character. That keeps the whole scan linear in the buffer size; the
+       earlier per-char col_in_string made it quadratic on a long line, which the
+       64 KB single-line cap could turn into a real per-frame stall. */
     int depth = 1;
     if (dir > 0) {                                  /* forward: opener -> closer */
         for (int r = row; r < JBE_BUF(s)->n_lines; r++) {
             const char *ll = JBE_BUF(s)->lines[r];
             int n = JBE_BUF(s)->len[r];
-            for (int k = (r == row ? col + 1 : 0); k < n; k++) {
-                if (col_in_string(ll, n, k)) continue;
-                if      (ll[k] == open) depth++;
-                else if (ll[k] == want && --depth == 0) { *mrow = r; *mcol = k; return true; }
+            int k = (r == row) ? col + 1 : 0;
+            bool instr = false;
+            for (int i = 0; i < k && i < n; i++) if (ll[i] == '"') instr = !instr;
+            for (; k < n; k++) {
+                char ch = ll[k];
+                if (ch == '"') { instr = !instr; continue; }
+                if (!instr) {
+                    if      (ch == open) depth++;
+                    else if (ch == want && --depth == 0) { *mrow = r; *mcol = k; return true; }
+                }
             }
         }
     } else {                                        /* backward: closer -> opener */
         for (int r = row; r >= 0; r--) {
             const char *ll = JBE_BUF(s)->lines[r];
             int n = JBE_BUF(s)->len[r];
-            for (int k = (r == row ? col - 1 : n - 1); k >= 0; k--) {
-                if (col_in_string(ll, n, k)) continue;
-                if      (ll[k] == open) depth++;
-                else if (ll[k] == want && --depth == 0) { *mrow = r; *mcol = k; return true; }
+            int k = (r == row) ? col - 1 : n - 1;
+            bool instr = false;                     /* parity of quotes in [0,k) */
+            for (int i = 0; i < k && i < n; i++) if (ll[i] == '"') instr = !instr;
+            for (; k >= 0; k--) {
+                char ch = ll[k];
+                if (ch != '"' && !instr) {
+                    if      (ch == open) depth++;
+                    else if (ch == want && --depth == 0) { *mrow = r; *mcol = k; return true; }
+                }
+                if (k - 1 >= 0 && ll[k - 1] == '"') instr = !instr;  /* step parity to k-1 */
             }
         }
     }
@@ -4098,8 +4115,12 @@ static void commander_do_rename(jbe_state_t *s, const char *newname) {
            so nothing is lost. */
         char tpath[200];
         cmd_join(tpath, sizeof tpath, a->cwd, ".jbe_rename.tmp");
-        if (cmd_copy_file(spath, tpath) < 0) { cmd_reload(a);
-            snprintf(s->commander_msg, sizeof s->commander_msg, "Rename of %s failed", oldname); return; }
+        japi_remove(tpath);                     /* clear any stale temp from a prior crash */
+        if (cmd_copy_file(spath, tpath) < 0) {
+            japi_remove(tpath);                 /* drop a half-written temp on failure */
+            cmd_reload(a);
+            snprintf(s->commander_msg, sizeof s->commander_msg, "Rename of %s failed", oldname); return;
+        }
         japi_remove(spath);
         if (cmd_copy_file(tpath, dpath) < 0) {
             cmd_copy_file(tpath, spath);        /* best-effort restore */
