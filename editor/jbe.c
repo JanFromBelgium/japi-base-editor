@@ -3672,9 +3672,10 @@ static void render_confirm_box(jbe_state_t *s) {
 #define JFC_DIV     (JFC_LEFT + JFC_W / 2)          /* 63: divider column */
 #define JFC_HDR_ROW (JFC_TOP + 1)                   /* pane cwd headers     */
 #define JFC_LIST_ROW (JFC_TOP + 2)
-#define JFC_LIST_H  (JFC_H - 5)                      /* border+hdr+2 legend+border */
-#define JFC_LEG1_ROW (JFC_BOTTOM - 2)
-#define JFC_LEG2_ROW (JFC_BOTTOM - 1)
+#define JFC_LIST_H  (JFC_H - 6)                      /* border+hdr+msg+2 legend+border */
+#define JFC_MSG_ROW  (JFC_BOTTOM - 3)                /* prompt / confirm / result    */
+#define JFC_LEG1_ROW (JFC_BOTTOM - 2)                /* legend: keys row             */
+#define JFC_LEG2_ROW (JFC_BOTTOM - 1)                /* legend: action labels row    */
 #define JFC_P0_COL  (JFC_LEFT + 2)
 #define JFC_P0_W    (JFC_DIV - JFC_P0_COL - 1)
 #define JFC_P1_COL  (JFC_DIV + 2)
@@ -3940,32 +3941,42 @@ static void render_commander(jbe_state_t *s) {
         w->sel_fg = sf; w->sel_bg = sb;
     }
 
-    /* Two legend rows above the bottom border. The top one becomes the name
-       prompt / delete confirmation / last-result message when there is one. */
-    jfc_clear_row(JFC_LEG1_ROW, VGA_WHITE, BG);
+    /* The key legend, built in little blocks: each column has the key on the
+       top row and its action spelled out below it, both left-aligned. */
+    jfc_clear_row(JFC_MSG_ROW,  VGA_WHITE, BG);
+    jfc_clear_row(JFC_LEG1_ROW, VGA_CYAN,  BG);
     jfc_clear_row(JFC_LEG2_ROW, VGA_WHITE, BG);
-    vga_print(JFC_LEG2_ROW, JFC_LEFT + 2,
-              "F2 Rename   F5 Copy   F6 Move   F7 New folder   F8 Delete", VGA_WHITE, BG);
+    static const char *const LEG_KEYS[] =
+        { "Tab", "Ctrl+Tab", "F2", "F5", "F6", "F7", "F8", "Esc" };
+    static const char *const LEG_ACTS[] =
+        { "Switch pane", "Switch drive", "Rename", "Copy", "Move",
+          "New folder", "Delete", "Close" };
+    int x = JFC_LEFT + 3;
+    for (int i = 0; i < 8; i++) {
+        int kl = (int)strlen(LEG_KEYS[i]), al = (int)strlen(LEG_ACTS[i]);
+        vga_print(JFC_LEG1_ROW, x, LEG_KEYS[i], VGA_CYAN,  BG);   /* key   (cyan)  */
+        vga_print(JFC_LEG2_ROW, x, LEG_ACTS[i], VGA_WHITE, BG);   /* action (white)*/
+        x += (kl > al ? kl : al) + 2;
+    }
 
+    /* The message row above the legend: a name prompt, a delete confirmation,
+       or the last result. */
     if (s->commander_input_active) {
         char line[160];
         snprintf(line, sizeof line, " %s %s_",
                  s->commander_input_kind == 0 ? "New folder name:" : "Rename to:",
                  s->commander_input);
-        jfc_clear_row(JFC_LEG1_ROW, JBE_PROMPT_FG, JBE_PROMPT_BG);
-        vga_print(JFC_LEG1_ROW, JFC_LEFT + 2, line, JBE_PROMPT_FG, JBE_PROMPT_BG);
+        jfc_clear_row(JFC_MSG_ROW, JBE_PROMPT_FG, JBE_PROMPT_BG);
+        vga_print(JFC_MSG_ROW, JFC_LEFT + 2, line, JBE_PROMPT_FG, JBE_PROMPT_BG);
     } else if (s->commander_confirm_delete) {
         ui_filelist_t *a = &s->commander_list[s->commander_pane];
         char line[160];
         snprintf(line, sizeof line, " Delete %s ?   Y = yes, any other key = no",
                  a->n_entries ? a->entries[a->sel].name : "");
-        jfc_clear_row(JFC_LEG1_ROW, JBE_PROMPT_FG, JBE_PROMPT_BG);
-        vga_print(JFC_LEG1_ROW, JFC_LEFT + 2, line, JBE_PROMPT_FG, JBE_PROMPT_BG);
+        jfc_clear_row(JFC_MSG_ROW, JBE_PROMPT_FG, JBE_PROMPT_BG);
+        vga_print(JFC_MSG_ROW, JFC_LEFT + 2, line, JBE_PROMPT_FG, JBE_PROMPT_BG);
     } else if (s->commander_msg[0]) {
-        vga_print(JFC_LEG1_ROW, JFC_LEFT + 2, s->commander_msg, VGA_CYAN, BG);
-    } else {
-        vga_print(JFC_LEG1_ROW, JFC_LEFT + 2,
-                  "Tab Switch pane   Ctrl+Tab Switch drive   Esc Close", VGA_WHITE, BG);
+        vga_print(JFC_MSG_ROW, JFC_LEFT + 2, s->commander_msg, VGA_CYAN, BG);
     }
 }
 
