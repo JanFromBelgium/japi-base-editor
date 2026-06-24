@@ -9,9 +9,9 @@ keyboard.
 
 ![Japi Base Editor — the Edit menu over a graphics program](images/editmenu.png)
 
-**This is v2.1, a production release.** It runs on real Japi Base hardware over
-VGA + PS/2, and the editor and its Japi Commander file manager are stable. See
-[Versioning](#versioning) for what the version number means.
+**This is v2.2, a production release.** It runs on real Japi Base hardware over
+VGA + PS/2; the editor, its Japi Commander file manager and the built-in
+calculator are stable. See [Versioning](#versioning) for what the number means.
 
 ## The hardware
 
@@ -98,6 +98,8 @@ Japi Base Computer (editor + BASIC) is a separate firmware.
   column of numbers out of a table, or comment a vertical strip.
 - **Clipboard** with stream/block awareness (cut, copy, paste).
 - **Toggle line comment** on the current line or selection.
+- **Format** — a BASIC-aware tidy-up: re-indent, trim trailing spaces and
+  uppercase keywords and built-in functions, over the file or a selection.
 - **Undo / Redo** with word-grain coalescing, multi-line steps and a 32 KB
   per-buffer history budget.
 - **Find** — incremental, case-insensitive, wrap-around.
@@ -113,6 +115,10 @@ Japi Base Computer (editor + BASIC) is a separate firmware.
 - **Built-in help** — a **Help** menu and **F1** open the manual right inside the
   editor, in a window that floats over your work. F1 in a menu jumps straight to
   that menu's section, or to the highlighted item.
+- **Built-in calculator** — press **NumLock** for a calculator over your text: a
+  programmer's calculator (hex/decimal/binary, bitwise, selectable width) and a
+  classic floating-point one, with **Shift+Tab** to switch and Ctrl+C / Ctrl+V to
+  move a number between the calculator and your code.
 
 ### Keyboard
 
@@ -184,8 +190,6 @@ current program, but that interpreter is developed on its own track.
 
 ## What is coming
 
-- **A more capable Japi Commander** — move, delete, rename, make-directory.
-  This is what graduates the editor to v2.0.
 - More syntax schemes and editor polish.
 
 ## Versioning
@@ -201,11 +205,10 @@ experimental:
   yet production-stable. When it stabilises it graduates to the next even
   production version.
 
-**This is v2.1 — an even, production release.** It runs on real hardware and is
-stable for everyday work: the editor and its Japi Commander file manager are
-feature-complete, with no known defects. v2.0 was the first production release;
-v2.1 adds the source formatter and full recursive folder operations in the
-Commander, among other refinements.
+**This is v2.2 — an even, production release.** It runs on real hardware and is
+stable for everyday work, with no known defects. v2.0 was the first production
+release; v2.1 added the source formatter and full recursive folder operations in
+the Commander; v2.2 brings the built-in calculator (NumLock) into the editor.
 
 ## License
 
