@@ -9,8 +9,8 @@ keyboard.
 
 ![Japi Base Editor — the Edit menu over a graphics program](images/editmenu.png)
 
-**This is v1.1, a development release.** It runs on real Japi Base hardware over
-VGA + PS/2. It graduates to v2.0 once the Japi Commander is fully built out. See
+**This is v2.1, a production release.** It runs on real Japi Base hardware over
+VGA + PS/2, and the editor and its Japi Commander file manager are stable. See
 [Versioning](#versioning) for what the version number means.
 
 ## The hardware
@@ -201,10 +201,11 @@ experimental:
   yet production-stable. When it stabilises it graduates to the next even
   production version.
 
-**This is v1.1 — an odd, development release.** It runs on real hardware and is
-yours to try, but it is not production-stable yet. A more capable Japi Commander
-is still to come; when that lands and the editor settles it will graduate to
-v2.0.
+**This is v2.1 — an even, production release.** It runs on real hardware and is
+stable for everyday work: the editor and its Japi Commander file manager are
+feature-complete, with no known defects. v2.0 was the first production release;
+v2.1 adds the source formatter and full recursive folder operations in the
+Commander, among other refinements.
 
 ## License
 
